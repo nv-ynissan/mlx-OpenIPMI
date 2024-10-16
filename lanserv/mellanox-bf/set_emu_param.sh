@@ -645,23 +645,27 @@ fi
 temp=""
 
 # Iterate through all the LNXTHERM:XX/description files to find which sensor corresponds with ddr_temp
-for file in /sys/bus/acpi/devices/LNXTHERM:*/description; do
+while IFS= read -r file; do
     # Check if the file contains the exactly string "ddr_temp"
     if grep -qx "ddr_temp" "$file"; then
-        found_ddr_temp=true
-        
         # Extract the hexadecimal code from the file path
         hex_code=$(echo "$file" | sed -n 's/.*LNXTHERM:\([0-9A-Fa-f]*\).*/\1/p')
         
         # Convert the hexadecimal code to decimal and add 1 to get the sensor number
         dec_code=$((0x$hex_code + 1))
         
-        # Extract the sensor value
-        temp=$(sensors -j acpitz-acpi-0 | jq -r ".\"acpitz-acpi-0\".temp$dec_code.temp${dec_code}_input")
+        # Extract the key starting with "acpi" dynamically (can be "acpitz-acpi-0", "acpitz-virtual-0", or something similar)
+        acpi_key=$(sensors -j | jq -r 'keys[] | select(startswith("acpi"))')
+
+        # Extract the sensor value using the detected key
+        temp=$(sensors -j "$acpi_key" | jq -r ".\"$acpi_key\".temp$dec_code.temp${dec_code}_input")
+
+        # Strip the decimal point and everything after it (sensor readings are always integers and multiples of 5)
+        temp=$(echo "$temp" | cut -d '.' -f 1)
         
         break
     fi
-done
+done < <(find -L /sys/bus/acpi/ -maxdepth 5 -type f -name "description" 2>/dev/null)
 
 # Check if temp is valid and write to file, else call remove_sensor
 if [[ -n "$temp" && "$temp" != "null" ]]; then
