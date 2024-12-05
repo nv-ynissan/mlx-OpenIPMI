@@ -636,46 +636,36 @@ else
 fi
 
 ####################################
-#     Get the DDR temperature      #
+#    Get the RTC Battry Voltage    #
 ####################################
 
-# Initialize temp to an empty string
-temp=""
+# Read discrete RTC low battery voltage value.
+# A value of 0x0 means RTC battery voltage is good.
+# A value of 0x80 means RTC battery voltage is low.
+temp=$(cat /sys/devices/platform/MLNXBF04:00/rtc_battery)
 
-# Iterate through all the LNXTHERM:XX/description files to find which sensor corresponds with ddr_temp
-while IFS= read -r file; do
-    # Check if the file contains the exactly string "ddr_temp"
-    if grep -qx "ddr_temp" "$file"; then
-        # Extract the hexadecimal code from the file path
-        hex_code=$(echo "$file" | sed -n 's/.*LNXTHERM:\([0-9A-Fa-f]*\).*/\1/p')
-        
-        # Convert the hexadecimal code to decimal and add 1 to get the sensor number
-        dec_code=$((0x$hex_code + 1))
-        
-        # Extract the key starting with "acpi" dynamically (can be "acpitz-acpi-0", "acpitz-virtual-0", or something similar)
-        acpi_key=$(sensors -j | jq -r 'keys[] | select(startswith("acpi"))')
+# Currently, there is no Redfish schema which supports discrete sensors.
+# Hence, we map the values to the corresponding voltages which they represent.
+# We need the sensor resolution in volts to be 0.1V, because the thresholds
+# can have non-integer values in that resolution.
+# Since the SDR sensor configuration is based on raw integer values, we set
+# the input to be 10 times the real value in volts we want displayed.
+# A good voltage is considered to be ~3 volts.
+# So, 0x0 will be mapped to 30 (10 times 3).
+# A low voltage is considered to ve ~2 volts.
+# So, 0x80 will be mapped to 20 (10 times 2).
 
-        # Extract the sensor value using the detected key
-        temp=$(sensors -j "$acpi_key" | jq -r ".\"$acpi_key\".temp$dec_code.temp${dec_code}_input")
-
-        # Strip the decimal point and everything after it (sensor readings are always integers and multiples of 5)
-        temp=$(echo "$temp" | cut -d '.' -f 1)
-        
-        break
-    fi
-# The -maxdepth option prevents find from traversing into circular symlinks,
-# which exist in the ACPI directory structure. A maxdepth of 5 ensures that
-# the search includes both /sys/bus/acpi/devices/ and /sys/bus/acpi/drivers/
-# directories, covering all potential sensor description files. This adds
-# robustness across different systems with varying filesystem structures.
-done < <(find -L /sys/bus/acpi/ -maxdepth 5 -type f -name "description" 2>/dev/null)
-
-# Check if temp is valid and write to file, else call remove_sensor
-if [[ -n "$temp" && "$temp" != "null" ]]; then
-    echo "$temp" > "$EMU_PARAM_DIR/ddr_temp"
-else
-    remove_sensor "ddr_temp"
-fi
+case "$temp" in
+    0x0)
+        echo "30" > "$EMU_PARAM_DIR/rtc_voltage"
+        ;;
+    0x80)
+        echo "20" > "$EMU_PARAM_DIR/rtc_voltage"
+        ;;
+    *)
+        remove_sensor "rtc_voltage"
+        ;;
+esac
 
 ###################################
 #          Get FW info            #

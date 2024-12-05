@@ -612,7 +612,7 @@ sdr type 1
 	uc_fthresh		105
 	positive_hysteresis	0
 	negative_hysteresis	0
-	id_string		"ddr_temp"
+	id_string		"rtc_voltage"
 endsdr
 
 # Timer for next FRU update
