@@ -84,6 +84,11 @@ sensor_add 0x30 0 0xb 0x02 0x01	\
 	poll 5000		\
 	file "/run/emu_param/power_envelope"
 
+# Add the RTC battery voltage sensor
+sensor_add 0x30 0 0xc 0x02 0x01 \
+    poll 5000       \
+    file "/run/emu_param/rtc_voltage"
+
 ########## FRUs ##########
 
 # mc_add_fru_data mc-addr DeviceID FRUSize (data byte1 ... byteN |
